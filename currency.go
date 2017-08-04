@@ -86,7 +86,6 @@ func getJson(url string, target interface{}, file string) {
 		}
 
 		json.Unmarshal(data, target)
-		return
 	} else {
 		json.NewDecoder(r.Body).Decode(target)
 
