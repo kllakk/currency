@@ -8,9 +8,10 @@ import (
 	"encoding/json"
 	"strings"
 	"strconv"
+	"io/ioutil"
 )
 
-var in = flag.String("in", "200 CZK", "Исходная валюта: Значение и RUR EUR CZK USD GEL")
+var in = flag.String("in", "1 RUB", "Исходная валюта: Значение и RUB EUR CZK USD GEL. Например, currency -in=\"10 EUR\" ")
 
 var client = &http.Client{Timeout: 10 * time.Second}
 
@@ -21,6 +22,11 @@ var types = []string {
 	"CZK",
 	"GEL",
 }
+
+const (
+	file_name = "currency_%s.data"
+	yahoo_url = "https://query.yahooapis.com/v1/public/yql?q=select+*+from+yahoo.finance.xchange+where+pair+=+%%22%s%%22&format=json&env=store%%3A%%2F%%2Fdatatables.org%%2Falltableswithkeys&callback="
+)
 
 func main() {
 	flag.Parse()
@@ -56,10 +62,11 @@ func getData(v float64, id string) {
 		currencies = append(currencies, s)
 	}
 
-	url := fmt.Sprintf("https://query.yahooapis.com/v1/public/yql?q=select+*+from+yahoo.finance.xchange+where+pair+=+%%22%s%%22&format=json&env=store%%3A%%2F%%2Fdatatables.org%%2Falltableswithkeys&callback=", strings.Join(currencies,","))
+	url := fmt.Sprintf(yahoo_url, strings.Join(currencies,","))
 
 	currency := new(Currency)
-	getJson(url, currency)
+	file := fmt.Sprintf(file_name, id)
+	getJson(url, currency, file)
 
 	for _, e := range currency.Query.Results.Rate {
 		if rate, err := strconv.ParseFloat(e.Rate, 64); err == nil {
@@ -68,14 +75,25 @@ func getData(v float64, id string) {
 	}
 }
 
-func getJson(url string, target interface{}) error {
+func getJson(url string, target interface{}, file string) {
 	r, err := client.Get(url)
 	if err != nil {
-		return err
+		fmt.Println("offline")
+		// получить данные из файла, если он есть
+		data, e := ioutil.ReadFile(file)
+		if e != nil {
+			fmt.Printf("Файл %s не существует\n", file)
+		}
+
+		json.Unmarshal(data, target)
+		return
+	} else {
+		json.NewDecoder(r.Body).Decode(target)
+
+		data, _ := json.Marshal(target)
+		ioutil.WriteFile(file, data, 0644)
 	}
 	defer r.Body.Close()
-
-	return json.NewDecoder(r.Body).Decode(target)
 }
 
 type Currency struct {
